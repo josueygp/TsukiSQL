@@ -101,7 +101,7 @@ class AboutWindow:
         # Vincular clic al enlace de GitHub
         github_link.bind(
             '<Button-1>',
-            lambda e: webbrowser.open_new('https://github.com/usuario/TsukiSQL')
+            lambda e: webbrowser.open_new('https://github.com/josueygp/TsukiSQL')
         )
 
         # Botón para cerrar la ventana
