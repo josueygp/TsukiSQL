@@ -4,14 +4,10 @@ from tkinter import filedialog, messagebox
 def export_database(db_connection):
     """
     Exporta una base de datos SQLite a un archivo SQL, que contiene la definición de las tablas y los datos.
-
+    
     Parameters:
     - db_connection: Conexión a la base de datos SQLite.
-
-    Esta función muestra un cuadro de diálogo para que el usuario seleccione la ubicación donde guardar el archivo SQL.
-    El archivo contendrá las instrucciones SQL necesarias para recrear las tablas y los datos de la base de datos.
     """
-    # Abrir un cuadro de diálogo para seleccionar la ubicación y el nombre del archivo SQL de exportación
     sql_file_path = filedialog.asksaveasfilename(
         title="Exportar Base de Datos",
         defaultextension=".sql",
@@ -20,34 +16,60 @@ def export_database(db_connection):
     
     if sql_file_path:  # Si se seleccionó una ruta para guardar el archivo
         try:
-            with db_connection:  # Asegura que la conexión esté activa
-                cursor = db_connection.cursor()  # Crea un cursor para ejecutar consultas
-                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name != 'sqlite_sequence';")  # Consulta las tablas
-                tables = [row[0] for row in cursor.fetchall()]  # Extrae los nombres de las tablas
-
-                # Abre el archivo SQL en modo escritura
-                with open(sql_file_path, "w") as f:
+            with db_connection:
+                cursor = db_connection.cursor()
+                
+                # Configura la conexión para manejar caracteres UTF-8
+                cursor.execute("PRAGMA encoding='UTF-8';")
+                
+                # Consulta las tablas excluyendo sqlite_sequence
+                cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name != 'sqlite_sequence';")
+                tables = [row[0] for row in cursor.fetchall()]
+                
+                # Abre el archivo en modo escritura con codificación UTF-8
+                with open(sql_file_path, "w", encoding='utf-8') as f:
+                    # Escribe un encabezado para establecer la codificación
+                    f.write("-- coding: utf-8\n")
+                    f.write("PRAGMA encoding='UTF-8';\n\n")
+                    
                     for table in tables:
-                        # Escribe la definición de la tabla (DDL) en el archivo SQL
-                        cursor.execute(f"SELECT sql FROM sqlite_master WHERE name = '{table}'")
+                        # Obtiene y escribe la definición de la tabla
+                        cursor.execute(f"SELECT sql FROM sqlite_master WHERE name = ?", (table,))
                         ddl = cursor.fetchone()[0]
-                        f.write(f"{ddl};\n\n")  # Escribe la instrucción de creación de la tabla
+                        f.write(f"{ddl};\n\n") 
                         
-                        # Escribe los datos de la tabla en el archivo SQL
+                        # Obtiene y escribe los datos
                         cursor.execute(f"SELECT * FROM {table}")
                         rows = cursor.fetchall()
-                        if rows:  # Si hay filas en la tabla
-                            columns = [description[0] for description in cursor.description]  # Obtiene los nombres de las columnas
+                        
+                        if rows:
+                            columns = [description[0] for description in cursor.description]
+                            
                             for row in rows:
-                                # Formatea los valores de las filas y genera las sentencias INSERT
-                                values = ", ".join(f"'{str(value)}'" if value is not None else "NULL" for value in row)
-                                insert_statement = f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({values});"
-                                f.write(f"{insert_statement}\n")  # Escribe la sentencia INSERT en el archivo
-                            f.write("\n")  # Agrega una línea en blanco al final de cada tabla
-
-            # Muestra un mensaje de éxito al usuario
-            messagebox.showinfo("Exportación Exitosa", f"La base de datos se ha exportado a: {sql_file_path}")
-        
+                                # Maneja valores especiales y escapa caracteres
+                                values = []
+                                for value in row:
+                                    if value is None:
+                                        values.append("NULL")
+                                    elif isinstance(value, (int, float)):
+                                        values.append(str(value))
+                                    else:
+                                        # Escapa comillas simples y caracteres especiales
+                                        escaped_value = str(value).replace("'", "''")
+                                        values.append(f"'{escaped_value}'")
+                                
+                                insert_statement = f"INSERT INTO {table} ({', '.join(columns)}) VALUES ({', '.join(values)});"
+                                f.write(f"{insert_statement}\n")
+                            
+                            f.write("\n")  # Línea en blanco entre tablas
+                
+                messagebox.showinfo(
+                    "Exportación Exitosa",
+                    f"La base de datos se ha exportado correctamente a:\n{sql_file_path}"
+                )
+                
         except Exception as e:
-            # Si ocurre un error, muestra un mensaje de error
-            messagebox.showerror("Error de Exportación", str(e))
+            messagebox.showerror(
+                "Error de Exportación",
+                f"Error al exportar la base de datos:\n{str(e)}"
+            )
